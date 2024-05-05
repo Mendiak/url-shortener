@@ -1,23 +1,31 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser'); // Add this line
-const app = express();
+const dns = require('dns');
+const { promisify } = require('util');
+const bodyParser = require('body-parser');
+const path = require('path');
 
-// Basic Configuration
+const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(bodyParser.urlencoded({ extended: true })); // Use body-parser middleware
+// In-memory database for storing mappings between original and shortened URLs
+const urlDatabase = new Map(); // Define urlDatabase here
 
-app.use('/public', express.static(`${process.cwd()}/public`));
+// Promisify dns.lookup function for easier usage
+const dnsLookup = promisify(dns.lookup);
+
+app.use(cors());
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(bodyParser.urlencoded({ extended: true }));
 
 app.get('/', function(req, res) {
-  res.sendFile(process.cwd() + '/views/index.html');
+  res.sendFile(path.join(__dirname, '/views/index.html'));
 });
 
 // Endpoint to shorten a URL
 app.post('/api/shorturl', async (req, res) => {
+  console.log('Request Body:', req.body); // Log the request body
   const { url } = req.body;
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
@@ -26,10 +34,14 @@ app.post('/api/shorturl', async (req, res) => {
   // Verify if the submitted URL is valid
   try {
     const { hostname } = new URL(url);
-    await dnsLookup(hostname);
+    console.log('Valid URL:', url);
+    await dnsLookup(hostname.toLowerCase()); // Convertir a minúsculas
   } catch (error) {
-    return res.status(400).json({ error: 'Invalid URL' });
+    console.error('URL Validation Error:', error);
+    return res.json({ error: 'invalid url' });
   }
+  
+  
 
   // Generate a unique shortened URL
   const shortUrl = generateShortUrl();
@@ -39,6 +51,7 @@ app.post('/api/shorturl', async (req, res) => {
 
   res.json({ original_url: url, short_url: shortUrl });
 });
+
 
 // Helper function to generate a unique shortened URL
 function generateShortUrl() {
